@@ -1,3 +1,4 @@
+from hashlib import algorithms_available
 from jupyterhub.handlers import BaseHandler
 from jupyterhub.auth import Authenticator
 from jupyterhub.auth import LocalAuthenticator
@@ -6,6 +7,7 @@ import jwt
 from tornado import (
     gen,
     web,
+    httpclient,
 )
 from traitlets import (
     Bool,
@@ -13,9 +15,6 @@ from traitlets import (
     Unicode,
 )
 from urllib import parse
-
-from macpath import split
-
 
 class JSONWebTokenLoginHandler(BaseHandler):
     async def get(self):
@@ -28,6 +27,7 @@ class JSONWebTokenLoginHandler(BaseHandler):
         auth_param_content = self.get_argument(param_name, default="") if param_name else None
 
         signing_certificate = self.authenticator.signing_certificate
+        validate_url  = self.authenticator.validate_url
         secret = self.authenticator.secret
         algorithms = self.authenticator.algorithms
 
@@ -71,6 +71,8 @@ class JSONWebTokenLoginHandler(BaseHandler):
                 claims = self.verify_jwt_using_secret(token, secret, algorithms, audience)
             elif signing_certificate:
                 claims = self.verify_jwt_with_claims(token, signing_certificate, audience)
+            elif validate_url:
+                claims = self.verify_jwt_with_url(token, validate_url, algorithms, audience);
             else:
                 return self.auth_failed(auth_url)
         except jwt.exceptions.InvalidTokenError:
@@ -87,6 +89,19 @@ class JSONWebTokenLoginHandler(BaseHandler):
             self.redirect(redirect_url)
         else:
             raise web.HTTPError(401)
+
+    @staticmethod
+    def verify_jwt_with_url (token, url, algorithms, audience):
+
+        full_url = 'https://portal.pc2.uni-paderborn.de' + str(url)
+        http_client = httpclient.HTTPClient()
+        response = http_client.fetch(full_url)
+        pubkey = response.body.decode('utf-8')
+
+        if isinstance(pubkey, str):
+            return jwt.decode(token, pubkey, audience=audience, algorithms=algorithms);
+        else:
+            raise jwt.exceptions.InvalidTokenError;
 
     @staticmethod
     def verify_jwt_with_claims(token, signing_certificate, audience):
@@ -112,6 +127,7 @@ class JSONWebTokenLoginHandler(BaseHandler):
 
             nested_list = claims[split_claim_field[0]];
             # 1: = skip first
+            # TODO: return error, if username cannot be claimed
             for item in split_claim_field[1:]:
                 nested_list = nested_list[item];
 
@@ -156,6 +172,17 @@ class JSONWebTokenAuthenticator(Authenticator):
         The public certificate of the private key used to sign the incoming JSON Web Tokens.
 
         Should be a path to an X509 PEM format certificate filesystem.
+        """
+    )
+
+    validate_url = Unicode(
+        config=True,
+        help="""
+        The path to URL to fetch the public part 
+
+        Will be formatted to: 
+            jwttoken['iss'] + validate_url
+
         """
     )
 
