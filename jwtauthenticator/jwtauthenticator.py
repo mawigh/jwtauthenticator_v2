@@ -14,6 +14,8 @@ from traitlets import (
 )
 from urllib import parse
 
+from macpath import split
+
 
 class JSONWebTokenLoginHandler(BaseHandler):
     async def get(self):
@@ -103,12 +105,26 @@ class JSONWebTokenLoginHandler(BaseHandler):
 
     @staticmethod
     def retrieve_username(claims, username_claim_field, extract_username):
-        username = claims[username_claim_field]
+        
+        # claim username using '/' as separator
+        if "/" in username_claim_field:
+            split_claim_field = username_claim_field.split("/");
+
+            nested_list = claims[split_claim_field[0]];
+            # 1: = skip first
+            for item in split_claim_field[1:]:
+                nested_list = nested_list[item];
+
+            if isinstance(nested_list, str):
+                username = nested_list;
+        else:  
+            username = claims[username_claim_field]
+
         if extract_username:
             if "@" in username:
                 return username.split("@")[0]
-        return username
 
+        return username
 
 class JSONWebTokenAuthenticator(Authenticator):
     """
