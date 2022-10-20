@@ -4,6 +4,8 @@ from jupyterhub.auth import Authenticator
 from jupyterhub.auth import LocalAuthenticator
 from jupyterhub.utils import url_path_join
 import jwt
+import requests
+
 from tornado import (
     gen,
     web,
@@ -93,11 +95,15 @@ class JSONWebTokenLoginHandler(BaseHandler):
     @staticmethod
     def verify_jwt_with_url (token, url, algorithms, audience):
 
-        full_url = 'https://portal.pc2.uni-paderborn.de' + str(url)
-        http_client = httpclient.HTTPClient()
-        response = http_client.fetch(full_url)
-        pubkey = response.body.decode('utf-8')
+        #http_client = httpclient.AsyncHTTPClient()
+        #response = http_client.fetch(url)
+        #pubkey = response.body.decode('utf-8')
 
+        url = 'portal.pc2.uni-paderborn.de/auth/pubkey';
+        response = requests.get(url);
+        pubkey = response.text;
+
+        # TODO: Issuer vergleichen
         if isinstance(pubkey, str):
             return jwt.decode(token, pubkey, audience=audience, algorithms=algorithms);
         else:
